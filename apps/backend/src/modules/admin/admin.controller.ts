@@ -149,6 +149,16 @@ export class AdminController {
   }
 
   @Resource('MASTER_ALL')
+  @Post('user-management/assignments/:id/transfer')
+  async transferUserRoleAssignment(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: any,
+  ) {
+    const assignment = await this.adminService.transferUserRoleAssignment(id, body);
+    return ResponseHelper.success('User role assignment transferred successfully', assignment);
+  }
+
+  @Resource('MASTER_ALL')
   @Delete('user-management/assignments/:id')
   async deleteUserRoleAssignment(@Param('id', ParseIntPipe) id: number) {
     await this.adminService.deleteUserRoleAssignment(id);
@@ -164,8 +174,10 @@ export class AdminController {
 
   @Resource('MASTER_ALL')
   @Get('user-management/permission-overrides')
-  async getPermissionOverrides() {
-    const overrides = await this.adminService.getPermissionOverrides();
+  async getPermissionOverrides(@Query('assignmentId') assignmentId?: string) {
+    const overrides = await this.adminService.getPermissionOverrides(
+      assignmentId ? Number(assignmentId) : undefined,
+    );
     return ResponseHelper.success('Permission overrides fetched successfully', overrides);
   }
 

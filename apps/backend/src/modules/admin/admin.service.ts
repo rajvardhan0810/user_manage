@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../database/prisma.service';
 
@@ -669,6 +669,107 @@ export class AdminService {
     return this.prisma.userRoleAssignment.delete({ where: { id } });
   }
 
+  async transferUserRoleAssignment(id: number, data: any) {
+    const assignment = await this.prisma.userRoleAssignment.findUnique({
+      where: { id },
+      include: {
+        scopes: {
+          orderBy: [{ scope_type: 'asc' }, { scope_id: 'asc' }],
+        },
+      },
+    });
+
+    if (!assignment) throw new NotFoundException('User role assignment not found');
+    if (!assignment.is_active) {
+      throw new BadRequestException('Only active assignments can be transferred');
+    }
+
+    const nextRoleId = Number(data.newRoleId ?? data.roleId);
+    if (!Number.isFinite(nextRoleId) || nextRoleId <= 0) {
+      throw new BadRequestException('New role is required');
+    }
+
+    const normalizedScopes = this.normalizeAssignmentScopes(data.scopes);
+    if (normalizedScopes.length === 0) {
+      throw new BadRequestException('At least one scope is required for transfer');
+    }
+
+    const effectiveValidFrom = data.effectiveDate ? new Date(data.effectiveDate) : new Date();
+
+    const existingActiveSameRole = await this.prisma.userRoleAssignment.findFirst({
+      where: {
+        user_id: assignment.user_id,
+        tenant_id: assignment.tenant_id,
+        role_id: nextRoleId,
+        is_active: true,
+        id: { not: id },
+      },
+      select: { id: true },
+    });
+
+    if (existingActiveSameRole) {
+      throw new BadRequestException('User already has the same role active');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.userRoleAssignment.update({
+        where: { id },
+        data: {
+          is_active: false,
+          valid_until: data.closeCurrentOn ? new Date(data.closeCurrentOn) : assignment.valid_until,
+        },
+      });
+
+      return tx.userRoleAssignment.create({
+        data: {
+          user_id: assignment.user_id,
+          role_id: nextRoleId,
+          tenant_id: assignment.tenant_id,
+          project_id:
+            data.projectId !== undefined
+              ? data.projectId
+                ? Number(data.projectId)
+                : null
+              : assignment.project_id,
+          valid_from: effectiveValidFrom,
+          valid_until: data.validUntil ? new Date(data.validUntil) : null,
+          transfer_order_no: data.transferOrderNo?.trim() || null,
+          transfer_reason: data.transferReason || null,
+          transferred_from_id: assignment.id,
+          assigned_by: data.assignedBy ? BigInt(data.assignedBy) : null,
+          remarks: data.remarks?.trim() || null,
+          is_active: true,
+          scopes: {
+            create: normalizedScopes,
+          },
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              department_user: { select: { full_name: true } },
+            },
+          },
+          role: true,
+          tenant: true,
+          project: true,
+          scopes: {
+            orderBy: [{ scope_type: 'asc' }, { scope_id: 'asc' }],
+          },
+          transferred_from: {
+            include: {
+              role: true,
+              scopes: {
+                orderBy: [{ scope_type: 'asc' }, { scope_id: 'asc' }],
+              },
+            },
+          },
+        },
+      });
+    });
+  }
+
   async getTransferHistory() {
     return this.prisma.userRoleAssignment.findMany({
       where: {
@@ -687,24 +788,37 @@ export class AdminService {
           },
         },
         role: true,
+        tenant: true,
+        project: true,
+        scopes: {
+          orderBy: [{ scope_type: 'asc' }, { scope_id: 'asc' }],
+        },
         transferred_from: {
           include: {
+            role: true,
+            scopes: {
+              orderBy: [{ scope_type: 'asc' }, { scope_id: 'asc' }],
+            },
             user: {
               select: {
                 email: true,
                 department_user: { select: { full_name: true } },
               },
             },
-            role: true,
           },
         },
       },
-      orderBy: { id: 'desc' },
+      orderBy: { created_at: 'desc' },
     });
   }
 
-  async getPermissionOverrides() {
+  async getPermissionOverrides(assignmentId?: number) {
     return this.prisma.userAssignmentPermissionOverride.findMany({
+      where: assignmentId
+        ? {
+            assignment_id: assignmentId,
+          }
+        : undefined,
       include: {
         assignment: {
           include: {
@@ -729,8 +843,19 @@ export class AdminService {
   }
 
   async createPermissionOverride(data: any) {
-    return this.prisma.userAssignmentPermissionOverride.create({
-      data: {
+    return this.prisma.userAssignmentPermissionOverride.upsert({
+      where: {
+        assignment_id_permission_id: {
+          assignment_id: Number(data.assignmentId),
+          permission_id: Number(data.permissionId),
+        },
+      },
+      update: {
+        effect: data.effect,
+        reason: data.reason?.trim() || null,
+        created_by: data.createdBy ? BigInt(data.createdBy) : null,
+      },
+      create: {
         assignment_id: Number(data.assignmentId),
         permission_id: Number(data.permissionId),
         effect: data.effect,
