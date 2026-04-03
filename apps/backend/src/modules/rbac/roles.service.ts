@@ -15,7 +15,9 @@ export class RolesService {
   }
 
   async findAll() {
-    return this.prisma.roles.findMany();
+    return this.prisma.roles.findMany({
+      orderBy: { id: 'asc' },
+    });
   }
 
   async findOne(id: number) {

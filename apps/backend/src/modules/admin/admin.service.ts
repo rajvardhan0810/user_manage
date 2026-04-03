@@ -27,6 +27,12 @@ type AdminUserPayload = {
   isActive?: boolean;
 };
 
+type AssignmentScopePayload = {
+  scopeType?: string;
+  scopeId?: number | string;
+  scopeLabel?: string | null;
+};
+
 const DEFAULT_TENANT_ID = 1;
 
 @Injectable()
@@ -92,7 +98,15 @@ export class AdminService {
       const roleNames = assignedRoles.map((role) => role.name);
 
       return {
-        ...user,
+        id: user.id.toString(),
+        email: user.email,
+        passwordHash: user.password_hash ?? null,
+        salt: user.salt ?? null,
+        passwordAlgo: user.password_algo ?? null,
+        userType: user.user_type,
+        roleId: user.role_id,
+        isEmailVerified: user.is_email_verified,
+        lastLoginAt: user.last_login_at,
         name: user.department_user?.full_name ?? user.email,
         hindiFullName: user.department_user?.hindi_full_name ?? null,
         officeNo: user.department_user?.office_no ?? null,
@@ -126,8 +140,30 @@ export class AdminService {
           select: { users: true },
         },
       },
-      orderBy: { name: 'asc' },
+      orderBy: { id: 'asc' },
     });
+  }
+
+  private normalizeAssignmentScopes(scopes: AssignmentScopePayload[] | undefined) {
+    if (!Array.isArray(scopes)) return [];
+
+    return scopes
+      .map((scope) => {
+        const scopeType = String(scope?.scopeType || '').trim().toUpperCase();
+        const scopeId = Number(scope?.scopeId);
+        const scopeLabel = scope?.scopeLabel ? String(scope.scopeLabel).trim() : null;
+
+        if (!scopeType || !Number.isFinite(scopeId) || scopeId <= 0) {
+          return null;
+        }
+
+        return {
+          scope_type: scopeType as any,
+          scope_id: scopeId,
+          scope_label: scopeLabel || null,
+        };
+      })
+      .filter((scope): scope is NonNullable<typeof scope> => Boolean(scope));
   }
 
   async getPermissions() {
@@ -312,6 +348,96 @@ export class AdminService {
     });
   }
 
+  async getTenants() {
+    return this.prisma.tenant.findMany({
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async getTenantProjects() {
+    return this.prisma.tenantProject.findMany({
+      include: {
+        tenant: true,
+      },
+      orderBy: [{ tenant_id: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  async getAssignmentScopeOptions(scopeType: string) {
+    const normalizedScopeType = String(scopeType || '').trim().toUpperCase();
+
+    switch (normalizedScopeType) {
+      case 'STATE':
+        return this.prisma.state.findMany({
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        });
+      case 'DISTRICT':
+        return this.prisma.district.findMany({
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        });
+      case 'BLOCK':
+        return this.prisma.block.findMany({
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        });
+      case 'TEHSIL':
+        return this.prisma.tehsil.findMany({
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        });
+      case 'VILLAGE':
+        return this.prisma.village.findMany({
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        });
+      case 'DIVISION':
+        return this.prisma.ujsDivision.findMany({
+          select: {
+            id: true,
+            officeName: true,
+          },
+          orderBy: { officeName: 'asc' },
+        }).then((rows) =>
+          rows.map((row) => ({
+            id: row.id,
+            name: row.officeName,
+          })),
+        );
+      case 'CIRCLE':
+        return this.prisma.department_users.findMany({
+          where: {
+            circle_id: {
+              not: null,
+            },
+          },
+          select: {
+            circle_id: true,
+          },
+          distinct: ['circle_id'],
+          orderBy: {
+            circle_id: 'asc',
+          },
+        }).then((rows) =>
+          rows
+            .filter((row) => row.circle_id)
+            .map((row, index) => ({
+              id: index + 1,
+              value: row.circle_id as string,
+              name: row.circle_id as string,
+            })),
+        );
+      case 'PROJECT':
+        return this.prisma.tenantProject.findMany({
+          select: { id: true, name: true, code: true, tenant_id: true },
+          orderBy: { name: 'asc' },
+        });
+      default:
+        return [];
+    }
+  }
+
   async getPermissionRecords() {
     return this.prisma.permission.findMany({
       include: {
@@ -379,6 +505,9 @@ export class AdminService {
         role: true,
         tenant: true,
         project: true,
+        scopes: {
+          orderBy: [{ scope_type: 'asc' }, { scope_id: 'asc' }],
+        },
         transferred_from: {
           include: {
             user: {
@@ -395,11 +524,13 @@ export class AdminService {
           },
         },
       },
-      orderBy: { id: 'desc' },
+      orderBy: { id: 'asc' },
     });
   }
 
   async createUserRoleAssignment(data: any) {
+    const normalizedScopes = this.normalizeAssignmentScopes(data.scopes);
+
     return this.prisma.userRoleAssignment.create({
       data: {
         user_id: BigInt(data.userId),
@@ -414,6 +545,11 @@ export class AdminService {
         assigned_by: data.assignedBy ? BigInt(data.assignedBy) : null,
         remarks: data.remarks?.trim() || null,
         is_active: data.isActive !== false,
+        scopes: normalizedScopes.length
+          ? {
+              create: normalizedScopes,
+            }
+          : undefined,
       },
       include: {
         user: {
@@ -426,6 +562,9 @@ export class AdminService {
         role: true,
         tenant: true,
         project: true,
+        scopes: {
+          orderBy: [{ scope_type: 'asc' }, { scope_id: 'asc' }],
+        },
         transferred_from: {
           include: {
             user: {
@@ -445,59 +584,81 @@ export class AdminService {
     const assignment = await this.prisma.userRoleAssignment.findUnique({ where: { id } });
     if (!assignment) throw new NotFoundException('User role assignment not found');
 
-    return this.prisma.userRoleAssignment.update({
-      where: { id },
-      data: {
-        ...(data.userId !== undefined && { user_id: BigInt(data.userId) }),
-        ...(data.roleId !== undefined && { role_id: Number(data.roleId) }),
-        ...(data.tenantId !== undefined && { tenant_id: Number(data.tenantId) }),
-        ...(data.projectId !== undefined && {
-          project_id: data.projectId ? Number(data.projectId) : null,
-        }),
-        ...(data.validFrom !== undefined && {
-          valid_from: data.validFrom ? new Date(data.validFrom) : assignment.valid_from,
-        }),
-        ...(data.validUntil !== undefined && {
-          valid_until: data.validUntil ? new Date(data.validUntil) : null,
-        }),
-        ...(data.transferOrderNo !== undefined && {
-          transfer_order_no: data.transferOrderNo?.trim() || null,
-        }),
-        ...(data.transferReason !== undefined && {
-          transfer_reason: data.transferReason || null,
-        }),
-        ...(data.transferredFromId !== undefined && {
-          transferred_from_id: data.transferredFromId ? Number(data.transferredFromId) : null,
-        }),
-        ...(data.assignedBy !== undefined && {
-          assigned_by: data.assignedBy ? BigInt(data.assignedBy) : null,
-        }),
-        ...(data.remarks !== undefined && { remarks: data.remarks?.trim() || null }),
-        ...(data.isActive !== undefined && { is_active: Boolean(data.isActive) }),
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            department_user: { select: { full_name: true } },
-          },
+    const normalizedScopes = data.scopes !== undefined
+      ? this.normalizeAssignmentScopes(data.scopes)
+      : null;
+
+    return this.prisma.$transaction(async (tx) => {
+      if (normalizedScopes !== null) {
+        await tx.userAssignmentScope.deleteMany({
+          where: { assignment_id: id },
+        });
+      }
+
+      return tx.userRoleAssignment.update({
+        where: { id },
+        data: {
+          ...(data.userId !== undefined && { user_id: BigInt(data.userId) }),
+          ...(data.roleId !== undefined && { role_id: Number(data.roleId) }),
+          ...(data.tenantId !== undefined && { tenant_id: Number(data.tenantId) }),
+          ...(data.projectId !== undefined && {
+            project_id: data.projectId ? Number(data.projectId) : null,
+          }),
+          ...(data.validFrom !== undefined && {
+            valid_from: data.validFrom ? new Date(data.validFrom) : assignment.valid_from,
+          }),
+          ...(data.validUntil !== undefined && {
+            valid_until: data.validUntil ? new Date(data.validUntil) : null,
+          }),
+          ...(data.transferOrderNo !== undefined && {
+            transfer_order_no: data.transferOrderNo?.trim() || null,
+          }),
+          ...(data.transferReason !== undefined && {
+            transfer_reason: data.transferReason || null,
+          }),
+          ...(data.transferredFromId !== undefined && {
+            transferred_from_id: data.transferredFromId ? Number(data.transferredFromId) : null,
+          }),
+          ...(data.assignedBy !== undefined && {
+            assigned_by: data.assignedBy ? BigInt(data.assignedBy) : null,
+          }),
+          ...(data.remarks !== undefined && { remarks: data.remarks?.trim() || null }),
+          ...(data.isActive !== undefined && { is_active: Boolean(data.isActive) }),
+          ...(normalizedScopes !== null && {
+            scopes: normalizedScopes.length
+              ? {
+                  create: normalizedScopes,
+                }
+              : undefined,
+          }),
         },
-        role: true,
-        tenant: true,
-        project: true,
-        transferred_from: {
-          include: {
-            user: {
-              select: {
-                email: true,
-                department_user: { select: { full_name: true } },
-              },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              department_user: { select: { full_name: true } },
             },
-            role: true,
+          },
+          role: true,
+          tenant: true,
+          project: true,
+          scopes: {
+            orderBy: [{ scope_type: 'asc' }, { scope_id: 'asc' }],
+          },
+          transferred_from: {
+            include: {
+              user: {
+                select: {
+                  email: true,
+                  department_user: { select: { full_name: true } },
+                },
+              },
+              role: true,
+            },
           },
         },
-      },
+      });
     });
   }
 

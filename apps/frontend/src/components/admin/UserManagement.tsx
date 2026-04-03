@@ -1,22 +1,31 @@
-'use client';
+"use client";
 
-import { useRef, useState } from 'react';
-import { Button } from 'primereact/button';
-import { Dialog } from 'primereact/dialog';
-import { Toast } from 'primereact/toast';
-import { Tag } from 'primereact/tag';
-import { Toolbar } from 'primereact/toolbar';
-import { InputText } from 'primereact/inputtext';
-import { Dropdown } from 'primereact/dropdown';
-import { MultiSelect } from 'primereact/multiselect';
-import { ReusableDataTable, ReusableDataTableConfig, RowAction } from '@/components/DataTable';
-import { useDataTableManager } from '@/hooks/useDataTableManager';
-import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '@/hooks/useUsers';
-import { useDepartments } from '@/hooks/master/useDepartments';
-import { useRoles as useAdminRoles } from '@/hooks/useAdminData';
-import { User } from '@/types/user';
+import { useRef, useState } from "react";
+import { Button } from "primereact/button";
+import { Dialog } from "primereact/dialog";
+import { Toast } from "primereact/toast";
+import { Tag } from "primereact/tag";
+import { Toolbar } from "primereact/toolbar";
+import { InputText } from "primereact/inputtext";
+import { Dropdown } from "primereact/dropdown";
+import { MultiSelect } from "primereact/multiselect";
+import {
+  ReusableDataTable,
+  ReusableDataTableConfig,
+  RowAction,
+} from "@/components/DataTable";
+import { useDataTableManager } from "@/hooks/useDataTableManager";
+import {
+  useUsers,
+  useCreateUser,
+  useUpdateUser,
+  useDeleteUser,
+} from "@/hooks/useUsers";
+import { useDepartments } from "@/hooks/master/useDepartments";
+import { useRoles as useAdminRoles } from "@/hooks/useAdminData";
+import { User } from "@/types/user";
 
-const DEFAULT_USER_TYPE = 'DEPARTMENT';
+const DEFAULT_USER_TYPE = "DEPARTMENT";
 
 type FormData = {
   email: string;
@@ -25,6 +34,7 @@ type FormData = {
   name: string;
   hindiFullName: string;
   roleIds: number[];
+  tenantId: number;
   officeNo: string;
   mobile: string;
   deptId: number | null;
@@ -43,30 +53,35 @@ type FormData = {
 };
 
 const INITIAL_FORM_DATA: FormData = {
-  email: '',
-  password: '',
-  confirmPassword: '',
-  name: '',
-  hindiFullName: '',
+  email: "",
+  password: "",
+  confirmPassword: "",
+  name: "",
+  hindiFullName: "",
   roleIds: [],
-  officeNo: '',
-  mobile: '',
+  tenantId: 1,
+  officeNo: "",
+  mobile: "",
   deptId: null,
-  districtId: '',
-  tahsilId: '0',
-  circleId: '',
-  blockId: '0',
-  officeId: '0',
-  divisionId: '0',
-  delegateOfficerNumber: '',
-  delegateOfficerName: '',
-  delegateOfficerEmail: '',
+  districtId: "",
+  tahsilId: "0",
+  circleId: "",
+  blockId: "0",
+  officeId: "0",
+  divisionId: "0",
+  delegateOfficerNumber: "",
+  delegateOfficerName: "",
+  delegateOfficerEmail: "",
   isForTesting: false,
   isActive: true,
   isEmailVerified: false,
 };
 
-type UserPayload = Omit<User, 'id' | 'createdAt' | 'updatedAt'> & Record<string, any>;
+type UserPayload = Omit<
+  User,
+  "id" | "createdAt" | "updatedAt" | "roleId" | "roleName"
+> &
+  Record<string, any>;
 
 export const UserManagement = () => {
   const { data: users = [], isLoading } = useUsers();
@@ -97,10 +112,29 @@ export const UserManagement = () => {
       value: department.id,
     }));
 
-  const roleOptions = roles.map((role: any) => ({
-    label: role.name,
-    value: role.id,
-  }));
+  const resolveTenantIdFromDepartment = (deptId: number | null | undefined) => {
+    if (!Number.isFinite(Number(deptId)) || Number(deptId) <= 0) {
+      return 1;
+    }
+
+    const matchedDepartment = departments.find(
+      (department: any) => Number(department?.id) === Number(deptId),
+    );
+
+    const departmentTenantId = Number(matchedDepartment?.tenant_id);
+    return Number.isFinite(departmentTenantId) && departmentTenantId > 0
+      ? departmentTenantId
+      : 1;
+  };
+
+  const roleOptions = roles
+    .filter(
+      (role: any) => role?.id != null && String(role?.name || "").trim() !== "",
+    )
+    .map((role: any) => ({
+      label: String(role.name).trim(),
+      value: Number(role.id),
+    }));
 
   const getUserName = (user: User) => {
     const anyUser = user as any;
@@ -110,53 +144,57 @@ export const UserManagement = () => {
 
   const tableConfig: ReusableDataTableConfig<User> = {
     columns: [
-      { field: 'id', header: 'ID', width: '5%', filterType: 'none' },
-      { field: 'email', header: 'Email', width: '25%', filterType: 'text' },
+      { field: "id", header: "ID", width: "5%", filterType: "none" },
+      { field: "email", header: "Email", width: "25%", filterType: "text" },
       {
-        field: 'name',
-        header: 'Name',
-        width: '20%',
-        filterType: 'text',
-        body: (row) => <span className="font-semibold">{getUserName(row)}</span>,
+        field: "name",
+        header: "Name",
+        width: "20%",
+        filterType: "text",
+        body: (row) => (
+          <span className="font-semibold">{getUserName(row)}</span>
+        ),
       },
       {
-        field: 'roleName',
-        header: 'Role',
-        width: '15%',
-        filterType: 'text',
-        body: (row) => <Tag value={(row as any).roleName || 'N/A'} severity="success" />,
+        field: "roleName",
+        header: "Role",
+        width: "15%",
+        filterType: "text",
+        body: (row) => (
+          <Tag value={(row as any).roleName || "N/A"} severity="success" />
+        ),
       },
       {
-        field: 'isActive',
-        header: 'Status',
-        width: '15%',
-        filterType: 'select',
+        field: "isActive",
+        header: "Status",
+        width: "15%",
+        filterType: "select",
         filterOptions: [
-          { label: 'Active', value: true },
-          { label: 'Inactive', value: false },
+          { label: "Active", value: true },
+          { label: "Inactive", value: false },
         ],
         body: (row) => (
           <Tag
-            value={(row as any).isActive ? 'Active' : 'Inactive'}
-            severity={(row as any).isActive ? 'success' : 'danger'}
+            value={(row as any).isActive ? "Active" : "Inactive"}
+            severity={(row as any).isActive ? "success" : "danger"}
           />
         ),
       },
       {
-        field: 'createdAt',
-        header: 'Created Date',
-        width: '15%',
-        filterType: 'date',
+        field: "createdAt",
+        header: "Created Date",
+        width: "15%",
+        filterType: "date",
         body: (row) => {
           const createdAt = (row as any).createdAt;
-          return createdAt ? new Date(createdAt).toLocaleDateString() : '-';
+          return createdAt ? new Date(createdAt).toLocaleDateString() : "-";
         },
       },
     ],
-    dataKey: 'id',
+    dataKey: "id",
     rows: 10,
     rowsPerPageOptions: [5, 10, 25, 50],
-    globalFilterFields: ['email', 'name', 'roleName'],
+    globalFilterFields: ["email", "name", "roleName"],
     selectable: true,
     paginator: true,
     stripedRows: true,
@@ -165,18 +203,18 @@ export const UserManagement = () => {
 
   const rowActions: RowAction<User>[] = [
     {
-      icon: 'pi pi-pencil',
-      label: 'Edit',
-      severity: 'info',
+      icon: "pi pi-pencil",
+      label: "Edit",
+      severity: "info",
       onClick: (user) => handleEdit(user),
-      tooltip: 'Edit user',
+      tooltip: "Edit user",
     },
     {
-      icon: 'pi pi-trash',
-      label: 'Delete',
-      severity: 'error',
+      icon: "pi pi-trash",
+      label: "Delete",
+      severity: "error",
       onClick: (user) => handleDelete(user),
-      tooltip: 'Delete user',
+      tooltip: "Delete user",
     },
   ];
 
@@ -184,7 +222,11 @@ export const UserManagement = () => {
     const target = e.target;
     const { name, value, checked } = target;
 
-    if (name === 'isActive' || name === 'isEmailVerified' || name === 'isForTesting') {
+    if (
+      name === "isActive" ||
+      name === "isEmailVerified" ||
+      name === "isForTesting"
+    ) {
       setFormData({ ...formData, [name]: checked });
       return;
     }
@@ -205,8 +247,11 @@ export const UserManagement = () => {
       password: fd.password,
       name: fd.name.trim(),
       hindiFullName: fd.hindiFullName.trim(),
+      tenantId: fd.tenantId,
       userType: DEFAULT_USER_TYPE,
       roleIds: fd.roleIds,
+      roleId: fd.roleIds.length > 0 ? fd.roleIds[0] : 0,
+      roleName: "",
       officeNo: fd.officeNo.trim(),
       mobile: fd.mobile.trim(),
       deptId: fd.deptId ?? 1,
@@ -222,7 +267,7 @@ export const UserManagement = () => {
       isForTesting: fd.isForTesting ? 1 : 0,
       isActive: fd.isActive,
       isEmailVerified: fd.isEmailVerified ? 1 : 0,
-      lastLoginAt: '',
+      lastLoginAt: "",
     };
   };
 
@@ -232,9 +277,9 @@ export const UserManagement = () => {
     try {
       if (editingId === null && !formData.password) {
         toastRef.current?.show({
-          severity: 'warn',
-          summary: 'Password Required',
-          detail: 'Please enter a password.',
+          severity: "warn",
+          summary: "Password Required",
+          detail: "Please enter a password.",
         });
         return;
       }
@@ -242,18 +287,18 @@ export const UserManagement = () => {
       if (formData.password || formData.confirmPassword) {
         if (formData.password !== formData.confirmPassword) {
           toastRef.current?.show({
-            severity: 'warn',
-            summary: 'Password Mismatch',
-            detail: 'Password and confirm password must match.',
+            severity: "warn",
+            summary: "Password Mismatch",
+            detail: "Password and confirm password must match.",
           });
           return;
         }
 
         if (formData.password.length < 6) {
           toastRef.current?.show({
-            severity: 'warn',
-            summary: 'Weak Password',
-            detail: 'Password must be at least 6 characters.',
+            severity: "warn",
+            summary: "Weak Password",
+            detail: "Password must be at least 6 characters.",
           });
           return;
         }
@@ -261,9 +306,9 @@ export const UserManagement = () => {
 
       if (formData.roleIds.length === 0) {
         toastRef.current?.show({
-          severity: 'warn',
-          summary: 'Role Required',
-          detail: 'Please select at least one role.',
+          severity: "warn",
+          summary: "Role Required",
+          detail: "Please select at least one role.",
         });
         return;
       }
@@ -276,16 +321,16 @@ export const UserManagement = () => {
           data: payload,
         });
         toastRef.current?.show({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'User updated successfully',
+          severity: "success",
+          summary: "Success",
+          detail: "User updated successfully",
         });
       } else {
         await createMutation.mutateAsync(payload);
         toastRef.current?.show({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'User created successfully',
+          severity: "success",
+          summary: "Success",
+          detail: "User created successfully",
         });
       }
 
@@ -293,9 +338,9 @@ export const UserManagement = () => {
       setShowDialog(false);
     } catch (err: any) {
       toastRef.current?.show({
-        severity: 'error',
-        summary: 'Error',
-        detail: err?.response?.data?.message || 'Error saving user',
+        severity: "error",
+        summary: "Error",
+        detail: err?.response?.data?.message || "Error saving user",
       });
     }
   };
@@ -304,42 +349,51 @@ export const UserManagement = () => {
     const anyUser = user as any;
 
     setFormData({
-      email: user.email || '',
-      password: '',
-      confirmPassword: '',
+      email: user.email || "",
+      password: "",
+      confirmPassword: "",
       name: anyUser.name || getUserName(user),
-      hindiFullName: anyUser.hindiFullName || '',
+      hindiFullName: anyUser.hindiFullName || "",
       roleIds:
         Array.isArray(anyUser.roleIds) && anyUser.roleIds.length > 0
           ? anyUser.roleIds
               .map((roleId: number | string) => Number(roleId))
               .filter((roleId: number) => !Number.isNaN(roleId))
           : anyUser.roleId != null
-            ? [Number(anyUser.roleId)].filter((roleId: number) => !Number.isNaN(roleId))
+            ? [Number(anyUser.roleId)].filter(
+                (roleId: number) => !Number.isNaN(roleId),
+              )
             : [],
-      officeNo: anyUser.officeNo || '',
-      mobile: anyUser.mobile || '',
+      officeNo: anyUser.officeNo || "",
+      mobile: anyUser.mobile || "",
+      tenantId:
+        anyUser.tenantId != null
+          ? Number(anyUser.tenantId)
+          : resolveTenantIdFromDepartment(
+              anyUser.deptId != null ? Number(anyUser.deptId) : null,
+            ),
       deptId: anyUser.deptId != null ? Number(anyUser.deptId) : null,
-      districtId: anyUser.districtId != null ? String(anyUser.districtId) : '',
-      tahsilId: anyUser.tahsilId != null ? String(anyUser.tahsilId) : '0',
-      circleId: anyUser.circleId || '',
-      blockId: anyUser.blockId != null ? String(anyUser.blockId) : '0',
-      officeId: anyUser.officeId != null ? String(anyUser.officeId) : '0',
-      divisionId: anyUser.divisionId != null ? String(anyUser.divisionId) : '0',
-      delegateOfficerNumber: anyUser.delegateOfficerNumber || '',
-      delegateOfficerName: anyUser.delegateOfficerName || '',
-      delegateOfficerEmail: anyUser.delegateOfficerEmail || '',
+      districtId: anyUser.districtId != null ? String(anyUser.districtId) : "",
+      tahsilId: anyUser.tahsilId != null ? String(anyUser.tahsilId) : "0",
+      circleId: anyUser.circleId || "",
+      blockId: anyUser.blockId != null ? String(anyUser.blockId) : "0",
+      officeId: anyUser.officeId != null ? String(anyUser.officeId) : "0",
+      divisionId: anyUser.divisionId != null ? String(anyUser.divisionId) : "0",
+      delegateOfficerNumber: anyUser.delegateOfficerNumber || "",
+      delegateOfficerName: anyUser.delegateOfficerName || "",
+      delegateOfficerEmail: anyUser.delegateOfficerEmail || "",
       isForTesting: anyUser.isForTesting === 1 || anyUser.isForTesting === true,
       isActive: anyUser.isActive ?? true,
-      isEmailVerified: anyUser.isEmailVerified === 1 || anyUser.isEmailVerified === true,
+      isEmailVerified:
+        anyUser.isEmailVerified === 1 || anyUser.isEmailVerified === true,
     });
 
     const numericId = Number(user.id);
     if (Number.isNaN(numericId)) {
       toastRef.current?.show({
-        severity: 'warn',
-        summary: 'Invalid ID',
-        detail: 'The selected user has a non-numeric ID.',
+        severity: "warn",
+        summary: "Invalid ID",
+        detail: "The selected user has a non-numeric ID.",
       });
       setEditingId(null);
     } else {
@@ -355,24 +409,24 @@ export const UserManagement = () => {
         const numericId = Number(user.id);
         if (Number.isNaN(numericId)) {
           toastRef.current?.show({
-            severity: 'warn',
-            summary: 'Invalid ID',
-            detail: 'Cannot delete: user ID is not numeric.',
+            severity: "warn",
+            summary: "Invalid ID",
+            detail: "Cannot delete: user ID is not numeric.",
           });
           return;
         }
 
         await deleteMutation.mutateAsync(numericId);
         toastRef.current?.show({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'User deleted successfully',
+          severity: "success",
+          summary: "Success",
+          detail: "User deleted successfully",
         });
       } catch {
         toastRef.current?.show({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Error deleting user',
+          severity: "error",
+          summary: "Error",
+          detail: "Error deleting user",
         });
       }
     }
@@ -388,18 +442,18 @@ export const UserManagement = () => {
     label: string,
     placeholder: string,
     required = false,
-    type: 'text' | 'email' | 'number' | 'password' = 'text'
+    type: "text" | "email" | "number" | "password" = "text",
   ) => (
     <div className="mb-3">
       <label htmlFor={name} className="form-label">
         {label}
-        {required ? ' *' : ''}
+        {required ? " *" : ""}
       </label>
       <InputText
         id={name}
         name={name}
         type={type}
-        value={String(formData[name] ?? '')}
+        value={String(formData[name] ?? "")}
         onChange={handleInputChange}
         placeholder={placeholder}
         className="w-100"
@@ -428,7 +482,7 @@ export const UserManagement = () => {
       outlined
       onClick={() => {
         clearFilters();
-        handleGlobalFilterChange('');
+        handleGlobalFilterChange("");
         handleFiltersChange({});
       }}
     />
@@ -440,15 +494,19 @@ export const UserManagement = () => {
 
       <div className="mb-4">
         <h1 className="h2 mb-3">User Management</h1>
-        <Toolbar left={leftToolbarTemplate} right={rightToolbarTemplate} className="mb-3" />
+        <Toolbar
+          left={leftToolbarTemplate}
+          right={rightToolbarTemplate}
+          className="mb-3"
+        />
       </div>
 
       <Dialog
         visible={showDialog}
         onHide={() => setShowDialog(false)}
-        header={editingId ? 'Edit User' : 'Add New User'}
+        header={editingId ? "Edit User" : "Add New User"}
         modal
-        style={{ width: '50vw' }}
+        style={{ width: "50vw" }}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="mb-3">
@@ -459,7 +517,13 @@ export const UserManagement = () => {
               id="deptId"
               value={formData.deptId}
               options={departmentOptions}
-              onChange={(e) => setFormData({ ...formData, deptId: e.value })}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  deptId: e.value,
+                  tenantId: resolveTenantIdFromDepartment(e.value),
+                })
+              }
               placeholder="Select Department"
               className="w-100"
               filter
@@ -467,61 +531,120 @@ export const UserManagement = () => {
             />
           </div>
 
-          {renderTextField('name', 'Name', 'Full Name', true)}
-          {renderTextField('hindiFullName', 'Hindi Name', 'Hindi Full Name')}
-          {renderTextField('email', 'Email', 'user@example.com', true, 'email')}
+          <div className="mb-3">
+            <label htmlFor="departmentIdDisplay" className="form-label">
+              Department ID
+            </label>
+            <InputText
+              id="departmentIdDisplay"
+              value={formData.deptId != null ? String(formData.deptId) : ""}
+              placeholder="Department ID"
+              className="w-100"
+              readOnly
+            />
+          </div>
+
+          <div className="mb-3">
+            <label htmlFor="tenantId" className="form-label">
+              Tenant ID
+            </label>
+            <InputText
+              id="tenantId"
+              value={String(formData.tenantId)}
+              placeholder="Tenant ID"
+              className="w-100"
+              readOnly
+            />
+          </div>
+
+          {renderTextField("name", "Name", "Full Name", true)}
+          {renderTextField("hindiFullName", "Hindi Name", "Hindi Full Name")}
+          {renderTextField("email", "Email", "user@example.com", true, "email")}
           {renderTextField(
-            'password',
-            editingId ? 'Password' : 'Password',
-            editingId ? 'Leave blank to keep current password' : 'Create password',
+            "password",
+            editingId ? "Password" : "Password",
+            editingId
+              ? "Leave blank to keep current password"
+              : "Create password",
             editingId === null,
-            'password'
+            "password",
           )}
           {renderTextField(
-            'confirmPassword',
-            editingId ? 'Confirm Password' : 'Confirm Password',
-            editingId ? 'Re-enter password if changing' : 'Confirm password',
+            "confirmPassword",
+            editingId ? "Confirm Password" : "Confirm Password",
+            editingId ? "Re-enter password if changing" : "Confirm password",
             editingId === null,
-            'password'
+            "password",
           )}
 
           <div className="mb-3">
             <label htmlFor="roleIds" className="form-label">
-              Role *
+              Roles *
             </label>
             <MultiSelect
               id="roleIds"
               value={formData.roleIds}
               options={roleOptions}
-              onChange={(e) => setFormData({ ...formData, roleIds: e.value ?? [] })}
-              placeholder="Select Role"
+              optionLabel="label"
+              optionValue="value"
+              onChange={(e) =>
+                setFormData({ ...formData, roleIds: e.value ?? [] })
+              }
+              placeholder="Select one or more roles"
               className="w-100"
-              filter
               display="chip"
               required
             />
           </div>
 
-          {renderTextField('officeNo', 'Office No', 'Office Number')}
-          {renderTextField('mobile', 'Mobile', 'Mobile Number')}
-          {renderTextField('districtId', 'District ID', 'District ID', false, 'number')}
-          {renderTextField('tahsilId', 'Tahsil ID', 'Tahsil ID', false, 'number')}
-          {renderTextField('circleId', 'Circle ID', 'Circle ID')}
-          {renderTextField('blockId', 'Block ID', 'Block ID', false, 'number')}
-          {renderTextField('officeId', 'Office ID', 'Office ID', false, 'number')}
-          {renderTextField('divisionId', 'Division ID', 'Division ID', false, 'number')}
+          {renderTextField("officeNo", "Office No", "Office Number")}
+          {renderTextField("mobile", "Mobile", "Mobile Number")}
           {renderTextField(
-            'delegateOfficerNumber',
-            'Delegate Officer Number',
-            'Delegate Officer Number'
-          )}
-          {renderTextField('delegateOfficerName', 'Delegate Officer Name', 'Delegate Officer Name')}
-          {renderTextField(
-            'delegateOfficerEmail',
-            'Delegate Officer Email',
-            'Delegate Officer Email',
+            "districtId",
+            "District ID",
+            "District ID",
             false,
-            'email'
+            "number",
+          )}
+          {renderTextField(
+            "tahsilId",
+            "Tahsil ID",
+            "Tahsil ID",
+            false,
+            "number",
+          )}
+          {renderTextField("circleId", "Circle ID", "Circle ID")}
+          {renderTextField("blockId", "Block ID", "Block ID", false, "number")}
+          {renderTextField(
+            "officeId",
+            "Office ID",
+            "Office ID",
+            false,
+            "number",
+          )}
+          {renderTextField(
+            "divisionId",
+            "Division ID",
+            "Division ID",
+            false,
+            "number",
+          )}
+          {renderTextField(
+            "delegateOfficerNumber",
+            "Delegate Officer Number",
+            "Delegate Officer Number",
+          )}
+          {renderTextField(
+            "delegateOfficerName",
+            "Delegate Officer Name",
+            "Delegate Officer Name",
+          )}
+          {renderTextField(
+            "delegateOfficerEmail",
+            "Delegate Officer Email",
+            "Delegate Officer Email",
+            false,
+            "email",
           )}
           <div className="mb-3">
             <div className="form-check">
@@ -573,7 +696,7 @@ export const UserManagement = () => {
 
           <div className="d-flex gap-2">
             <Button
-              label={editingId ? 'Update' : 'Create'}
+              label={editingId ? "Update" : "Create"}
               icon="pi pi-check"
               type="submit"
               loading={createMutation.isPending || updateMutation.isPending}

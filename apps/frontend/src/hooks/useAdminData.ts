@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import apiClient from '@/lib/api-client';
+import { useState, useEffect, useCallback } from "react";
+import apiClient from "@/lib/api-client";
 
 interface ApiResponse<T> {
   data: T;
@@ -15,7 +15,7 @@ export const useUsers = () => {
   const fetchUsers = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await apiClient.get<ApiResponse<any[]>>('/admin/users');
+      const response = await apiClient.get<ApiResponse<any[]>>("/admin/users");
       setData(response.data.data);
       setError(null);
     } catch (err) {
@@ -27,12 +27,12 @@ export const useUsers = () => {
 
   useEffect(() => {
     let isMounted = true;
-    
+
     const load = async () => {
       if (!isMounted) return;
       await fetchUsers();
     };
-    
+
     load();
 
     return () => {
@@ -51,7 +51,8 @@ export const useRoles = () => {
   const fetchRoles = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await apiClient.get<ApiResponse<any[]>>('/admin/roles');
+      const response = await apiClient.get<ApiResponse<any[]>>("/admin/roles");
+      console.log(response?.data?.data);
       setData(response.data.data);
       setError(null);
     } catch (err) {
@@ -63,12 +64,12 @@ export const useRoles = () => {
 
   useEffect(() => {
     let isMounted = true;
-    
+
     const load = async () => {
       if (!isMounted) return;
       await fetchRoles();
     };
-    
+
     load();
 
     return () => {
@@ -87,7 +88,8 @@ export const usePermissions = () => {
   const fetchPermissions = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await apiClient.get<ApiResponse<any[]>>('/admin/permissions');
+      const response =
+        await apiClient.get<ApiResponse<any[]>>("/admin/permissions");
       setData(response.data.data);
       setError(null);
     } catch (err) {
@@ -99,12 +101,12 @@ export const usePermissions = () => {
 
   useEffect(() => {
     let isMounted = true;
-    
+
     const load = async () => {
       if (!isMounted) return;
       await fetchPermissions();
     };
-    
+
     load();
 
     return () => {

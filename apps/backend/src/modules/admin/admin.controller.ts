@@ -4,6 +4,7 @@ import {
   Post,
   Put,
   Delete,
+  Query,
   Body,
   Param,
   ParseIntPipe,
@@ -69,6 +70,27 @@ export class AdminController {
   async getModules() {
     const modules = await this.adminService.getModules();
     return ResponseHelper.success('Modules fetched successfully', modules);
+  }
+
+  @Resource('MASTER_ALL')
+  @Get('user-management/tenants')
+  async getTenants() {
+    const tenants = await this.adminService.getTenants();
+    return ResponseHelper.success('Tenants fetched successfully', tenants);
+  }
+
+  @Resource('MASTER_ALL')
+  @Get('user-management/projects')
+  async getTenantProjects() {
+    const projects = await this.adminService.getTenantProjects();
+    return ResponseHelper.success('Projects fetched successfully', projects);
+  }
+
+  @Resource('MASTER_ALL')
+  @Get('user-management/assignment-scope-options')
+  async getAssignmentScopeOptions(@Query('scopeType') scopeType: string) {
+    const options = await this.adminService.getAssignmentScopeOptions(scopeType);
+    return ResponseHelper.success('Assignment scope options fetched successfully', options);
   }
 
   @Resource('MASTER_ALL')

@@ -1,5 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import apiClient from '@/lib/api-client';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import apiClient from "@/lib/api-client";
 
 interface Department {
   id: number;
@@ -24,6 +24,7 @@ interface Department {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  tenant_id?: number;
 }
 
 interface CreateDepartmentDto {
@@ -43,13 +44,12 @@ interface CreateDepartmentDto {
 
 interface UpdateDepartmentDto extends Partial<CreateDepartmentDto> {}
 
-
 // Fetch all departments
 export const useDepartments = (enabled: boolean = true) => {
   return useQuery<Department[]>({
-    queryKey: ['departments'],
+    queryKey: ["departments"],
     queryFn: async () => {
-      const response = await apiClient.get('/departments');
+      const response = await apiClient.get("/departments");
       return response.data;
     },
     enabled,
@@ -60,7 +60,7 @@ export const useDepartments = (enabled: boolean = true) => {
 // Fetch single department
 export const useDepartment = (id: number) => {
   return useQuery<Department>({
-    queryKey: ['departments', id],
+    queryKey: ["departments", id],
     queryFn: async () => {
       const response = await apiClient.get(`/departments/${id}`);
       return response.data;
@@ -75,11 +75,11 @@ export const useCreateDepartment = () => {
 
   return useMutation({
     mutationFn: async (data: CreateDepartmentDto) => {
-      const response = await apiClient.post('/departments', data);
+      const response = await apiClient.post("/departments", data);
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ["departments"] });
     },
   });
 };
@@ -89,12 +89,18 @@ export const useUpdateDepartment = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: UpdateDepartmentDto }) => {
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: number;
+      data: UpdateDepartmentDto;
+    }) => {
       const response = await apiClient.patch(`/departments/${id}`, data);
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ["departments"] });
     },
   });
 };
@@ -109,7 +115,7 @@ export const useDeleteDepartment = () => {
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ["departments"] });
     },
   });
 };
@@ -124,7 +130,7 @@ export const useToggleDepartment = () => {
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ["departments"] });
     },
   });
 };

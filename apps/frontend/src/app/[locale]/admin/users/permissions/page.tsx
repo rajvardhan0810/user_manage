@@ -27,6 +27,7 @@ export default function PermissionManagementPage() {
   const [modules, setModules] = useState<ModuleRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [togglingPermissionId, setTogglingPermissionId] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingPermission, setEditingPermission] = useState<PermissionRecord | null>(null);
   const [formData, setFormData] = useState({
@@ -135,6 +136,21 @@ export default function PermissionManagementPage() {
     }
   };
 
+  const handleStatusToggle = async (permission: PermissionRecord) => {
+    try {
+      setTogglingPermissionId(permission.id);
+      await apiClient.put(`/admin/user-management/permissions/${permission.id}`, {
+        isActive: !permission.is_active,
+      });
+      await loadData();
+    } catch (error: any) {
+      console.error('Failed to update permission status', error);
+      alert(error?.response?.data?.message || 'Failed to update permission status');
+    } finally {
+      setTogglingPermissionId(null);
+    }
+  };
+
   return (
     <div className="container-fluid p-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -174,17 +190,33 @@ export default function PermissionManagementPage() {
                       <td>
                         <div className="fw-semibold">{permission.module?.name || '-'}</div>
                         <div className="small text-muted">{permission.module?.code || '-'}</div>
+                        <div className="small text-muted">Module ID: {permission.module_id}</div>
                       </td>
                       <td>
                         <span className="badge bg-primary-subtle text-primary border">{permission.action}</span>
                       </td>
                       <td>{permission.description || '-'}</td>
                       <td>
-                        <span className={`badge ${permission.is_active ? 'bg-success' : 'bg-secondary'}`}>
-                          {permission.is_active ? 'Active' : 'Inactive'}
-                        </span>
+                        <div className="form-check form-switch d-inline-flex align-items-center gap-2 m-0">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            checked={permission.is_active}
+                            disabled={togglingPermissionId === permission.id}
+                            onChange={() => handleStatusToggle(permission)}
+                          />
+                          <span className={`badge ${permission.is_active ? 'bg-success' : 'bg-secondary'}`}>
+                            {permission.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
                       </td>
-                      <td>{permission.created_at ? new Date(permission.created_at).toLocaleDateString() : '-'}</td>
+                      <td>
+                        <div>{permission.created_at ? new Date(permission.created_at).toLocaleDateString() : '-'}</div>
+                        <div className="small text-muted">
+                          {permission.created_at ? new Date(permission.created_at).toLocaleTimeString() : ''}
+                        </div>
+                      </td>
                       <td className="text-end">
                         <button className="btn btn-sm btn-outline-primary me-2" onClick={() => openEditModal(permission)}>
                           <i className="bi bi-pencil"></i> Edit
@@ -260,17 +292,23 @@ export default function PermissionManagementPage() {
                     onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
                   />
                 </div>
-                <div className="form-check">
-                  <input
-                    id="permissionActive"
-                    type="checkbox"
-                    className="form-check-input"
-                    checked={formData.isActive}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
-                  />
-                  <label className="form-check-label" htmlFor="permissionActive">
-                    Active
-                  </label>
+                <div className="d-flex align-items-center justify-content-between border rounded px-3 py-2">
+                  <div>
+                    <div className="fw-semibold">Status</div>
+                    <div className="small text-muted">Toggle permission status between active and inactive.</div>
+                  </div>
+                  <div className="form-check form-switch m-0">
+                    <input
+                      id="permissionActive"
+                      type="checkbox"
+                      className="form-check-input"
+                      checked={formData.isActive}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
+                    />
+                    <label className="form-check-label ms-2" htmlFor="permissionActive">
+                      {formData.isActive ? 'Active' : 'Inactive'}
+                    </label>
+                  </div>
                 </div>
               </div>
               <div className="modal-footer">
