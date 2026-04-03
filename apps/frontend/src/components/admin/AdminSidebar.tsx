@@ -1,7 +1,7 @@
 
 'use client';
 
-import { Link } from '@/navigation';
+import { Link, useRouter } from '@/navigation';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import Image from 'next/image';
@@ -27,6 +27,7 @@ type DividerItem = {
 
 type ParentItem = BaseItem & {
   id: string;
+  href?: string;
   submenu: (LeafItem | DividerItem)[];
 };
 
@@ -37,6 +38,7 @@ type LinkItem = LeafItem | ParentItem;
  *  ------------------------------ */
 export const AdminSidebar = () => {
   const pathname = usePathname();
+  const router = useRouter();
 
   const locale = pathname.split('/')[1] || 'en';
   const L = (p: string) => `/${locale}${p}`;
@@ -54,15 +56,10 @@ export const AdminSidebar = () => {
     },
     {
       id: 'user-management',
+      href: '/admin/users',
       label: 'User Management',
       icon: 'bi-people',
       submenu: [
-        {
-          href: '/admin/users',
-          label: 'Users',
-          icon: 'bi-people',
-          code: 'USER_MANAGE',
-        },
         {
           href: '/admin/users/roles',
           label: 'Role Management',
@@ -391,8 +388,11 @@ export const AdminSidebar = () => {
     },
   ];
 
-  const toggleSubmenu = (id: string) => {
-    setOpenSubmenu(openSubmenu === id ? null : id);
+  const handleParentClick = (link: ParentItem) => {
+    setOpenSubmenu(link.id);
+    if (link.href) {
+      router.push(link.href);
+    }
   };
 
   return (
@@ -414,14 +414,16 @@ export const AdminSidebar = () => {
           // Parent item (has submenu)
           if ('submenu' in link) {
             const isOpen = openSubmenu === link.id;
-            const isActive = link.submenu.some(
-              (sublink) => 'href' in sublink && sublink.href && pathname === sublink.href
-            );
+            const isActive =
+              pathname === link.href ||
+              link.submenu.some(
+                (sublink) => 'href' in sublink && sublink.href && pathname === sublink.href
+              );
 
             return (
               <div key={link.id}>
                 <button
-                  onClick={() => toggleSubmenu(link.id)}
+                  onClick={() => handleParentClick(link)}
                   className={`nav-link d-flex align-items-center justify-content-between w-100 text-start ${isActive ? 'active' : ''
                     }`}
                   style={{ border: 'none', background: 'transparent' }}
