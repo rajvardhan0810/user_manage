@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../database/prisma.service';
 
@@ -448,10 +453,25 @@ export class AdminService {
   }
 
   async createPermissionRecord(data: any) {
+    const moduleId = Number(data.moduleId);
+    const action = String(data.action || '').trim().toUpperCase();
+
+    const existingPermission = await this.prisma.permission.findFirst({
+      where: {
+        module_id: moduleId,
+        action: action as any,
+      },
+      select: { id: true },
+    });
+
+    if (existingPermission) {
+      throw new ConflictException('This permission action already exists for the selected module');
+    }
+
     return this.prisma.permission.create({
       data: {
-        module_id: Number(data.moduleId),
-        action: data.action,
+        module_id: moduleId,
+        action: action as any,
         description: data.description?.trim() || null,
         is_active: data.isActive !== false,
       },
@@ -465,11 +485,29 @@ export class AdminService {
     const permission = await this.prisma.permission.findUnique({ where: { id } });
     if (!permission) throw new NotFoundException('Permission not found');
 
+    const nextModuleId =
+      data.moduleId !== undefined ? Number(data.moduleId) : permission.module_id;
+    const nextAction =
+      data.action !== undefined ? String(data.action || '').trim().toUpperCase() : permission.action;
+
+    const duplicatePermission = await this.prisma.permission.findFirst({
+      where: {
+        module_id: nextModuleId,
+        action: nextAction as any,
+        id: { not: id },
+      },
+      select: { id: true },
+    });
+
+    if (duplicatePermission) {
+      throw new ConflictException('This permission action already exists for the selected module');
+    }
+
     return this.prisma.permission.update({
       where: { id },
       data: {
-        ...(data.moduleId !== undefined && { module_id: Number(data.moduleId) }),
-        ...(data.action !== undefined && { action: data.action }),
+        ...(data.moduleId !== undefined && { module_id: nextModuleId }),
+        ...(data.action !== undefined && { action: nextAction as any }),
         ...(data.description !== undefined && {
           description: data.description?.trim() || null,
         }),

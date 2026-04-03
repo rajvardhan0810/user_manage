@@ -37,6 +37,17 @@ export default function PermissionManagementPage() {
     isActive: true,
   });
 
+  const availableActionOptions = ACTION_OPTIONS.filter((action) => {
+    if (!formData.moduleId) return true;
+
+    const duplicate = permissions.some((permission) => {
+      if (editingPermission && permission.id === editingPermission.id) return false;
+      return String(permission.module_id) === String(formData.moduleId) && permission.action === action;
+    });
+
+    return !duplicate;
+  });
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -58,6 +69,30 @@ export default function PermissionManagementPage() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    if (!showModal || !formData.moduleId) return;
+
+    const nextAvailableActions = ACTION_OPTIONS.filter((action) => {
+      const duplicate = permissions.some((permission) => {
+        if (editingPermission && permission.id === editingPermission.id) return false;
+        return String(permission.module_id) === String(formData.moduleId) && permission.action === action;
+      });
+
+      return !duplicate;
+    });
+
+    if (nextAvailableActions.length === 0) {
+      if (formData.action !== '') {
+        setFormData((prev) => ({ ...prev, action: '' }));
+      }
+      return;
+    }
+
+    if (!nextAvailableActions.includes(formData.action)) {
+      setFormData((prev) => ({ ...prev, action: nextAvailableActions[0] }));
+    }
+  }, [showModal, formData.moduleId, permissions, editingPermission, formData.action]);
+
   const resetForm = () => {
     setEditingPermission(null);
     setFormData({
@@ -70,14 +105,29 @@ export default function PermissionManagementPage() {
 
   const openCreateModal = () => {
     resetForm();
+    const defaultModuleId = modules[0] ? String(modules[0].id) : '';
+    const defaultAction =
+      ACTION_OPTIONS.find((action) =>
+        !permissions.some(
+          (permission) =>
+            String(permission.module_id) === defaultModuleId && permission.action === action,
+        ),
+      ) || 'READ';
+    setFormData({
+      moduleId: defaultModuleId,
+      action: defaultAction,
+      description: '',
+      isActive: true,
+    });
     setShowModal(true);
   };
 
   const openEditModal = (permission: PermissionRecord) => {
+    const fallbackAction = permission.action;
     setEditingPermission(permission);
     setFormData({
       moduleId: String(permission.module_id),
-      action: permission.action,
+      action: fallbackAction,
       description: permission.description ?? '',
       isActive: permission.is_active,
     });
@@ -93,6 +143,10 @@ export default function PermissionManagementPage() {
     e.preventDefault();
     if (!formData.moduleId) {
       alert('Please select a module.');
+      return;
+    }
+    if (!formData.action) {
+      alert('Please select an action.');
       return;
     }
 
@@ -276,12 +330,20 @@ export default function PermissionManagementPage() {
                     onChange={(e) => setFormData((prev) => ({ ...prev, action: e.target.value }))}
                     required
                   >
-                    {ACTION_OPTIONS.map((action) => (
+                    {availableActionOptions.length === 0 && (
+                      <option value="">No action available</option>
+                    )}
+                    {availableActionOptions.map((action) => (
                       <option key={action} value={action}>
                         {action}
                       </option>
                     ))}
                   </select>
+                  {formData.moduleId && availableActionOptions.length === 0 && (
+                    <div className="small text-danger mt-1">
+                      All actions already exist for this module.
+                    </div>
+                  )}
                 </div>
                 <div className="mb-3">
                   <label className="form-label">Description</label>
